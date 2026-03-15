@@ -1,5 +1,7 @@
 # SignalFlow
 
+**[https://signal-flow.vercel.app](https://signal-flow.vercel.app)**
+
 A production-style real-time event analytics platform. Events are ingested through a REST API, aggregated with Redis caching, and pushed live to a dashboard over WebSockets.
 
 Built as a full-stack portfolio project demonstrating async backend architecture, real-time UI patterns, and containerised deployment.

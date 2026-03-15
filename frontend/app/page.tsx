@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, EventRead, MetricsSummary, MetricsTimeseries } from "@/lib/api";
-import { useMetricsSocket } from "@/lib/useWebSocket";
+import { useMetricsSocket, WsMessage } from "@/lib/useWebSocket";
 import { StatCard } from "@/components/StatCard";
 import { EventTypeChart } from "@/components/EventTypeChart";
 import { TimeseriesChart } from "@/components/TimeseriesChart";
@@ -73,7 +73,7 @@ export default function DashboardPage() {
 
   // ── WebSocket — handle metrics push + live event feed ───────────────────
   const { connected } = useMetricsSocket(
-    useCallback((msg) => {
+    useCallback((msg: WsMessage) => {
       if (isPausedRef.current) return;   // gate updates when paused
 
       if (msg.type === "event_ingested" && msg.event) {
