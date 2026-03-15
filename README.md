@@ -1,19 +1,60 @@
 # SignalFlow
 
-Real-Time Event Analytics Platform — a production-style full-stack project built with FastAPI, Next.js, PostgreSQL, Redis, and WebSockets.
+A production-style real-time event analytics platform. Activity events are ingested through a REST API, aggregated asynchronously, cached in Redis, and pushed live to a dashboard over WebSockets.
+
+Built as a full-stack portfolio project to demonstrate distributed backend thinking, async processing, and real-time UI patterns.
 
 ---
 
-## Stack
+## Screenshots
 
-| Layer | Tech |
+### Dashboard
+![SignalFlow Dashboard](assets/signalflow%20dashboard.png)
+
+### Backend API Docs
+![SignalFlow Backend](assets/signalflow%20backend.png)
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
 |---|---|
 | Frontend | Next.js 15 · TypeScript · Recharts |
-| Backend API | FastAPI · Python 3.12 |
+| Backend | FastAPI · Python 3.12 · Uvicorn |
 | Database | PostgreSQL 16 |
-| Cache / Queue | Redis 7 |
+| Cache | Redis 7 |
 | Real-time | WebSockets (native FastAPI) |
 | Infra | Docker · docker-compose |
+
+---
+
+## Architecture
+
+```
+Browser
+  │
+  ├── HTTP GET  /metrics/summary     ──► Redis cache (10s TTL)
+  │                                         │ miss → PostgreSQL aggregates
+  ├── HTTP GET  /metrics/timeseries  ──► PostgreSQL date_trunc query
+  │
+  ├── HTTP POST /events              ──► PostgreSQL insert
+  │                                         │
+  │                                   background worker
+  │                                         │
+  │                                   invalidate Redis cache
+  │                                         │
+  └── WebSocket /ws/metrics  ◄────── broadcast updated metrics
+                                      to all connected clients
+```
+
+### Event ingestion pipeline
+
+1. Client sends `POST /events` with `event_type`, `session_id`, and optional metadata
+2. Pydantic validates the payload; FastAPI returns `201` with the persisted event
+3. An `asyncio` background task fires immediately after — no added latency to the response
+4. The task invalidates the Redis summary cache, recomputes aggregates from Postgres, and broadcasts the fresh summary to all connected WebSocket clients
+5. The Next.js dashboard receives the push and updates KPI cards and charts without polling
 
 ---
 
@@ -22,21 +63,26 @@ Real-Time Event Analytics Platform — a production-style full-stack project bui
 ```
 signalflow/
 ├── backend/
-│   ├── api/            # Route handlers (health, events, metrics)
-│   ├── models/         # SQLAlchemy ORM models
-│   ├── schemas/        # Pydantic request/response schemas
-│   ├── services/       # Business logic, cache, background worker
-│   ├── websocket/      # WS connection manager and routes
-│   ├── db.py           # Async SQLAlchemy engine + session
-│   ├── main.py         # FastAPI app entry point
-│   ├── requirements.txt
-│   └── Dockerfile
+│   ├── api/              # Route handlers — health, events, metrics
+│   ├── models/           # SQLAlchemy ORM models
+│   ├── schemas/          # Pydantic request / response shapes
+│   ├── services/
+│   │   ├── cache.py      # Redis async client
+│   │   ├── event_service.py
+│   │   ├── metrics_service.py
+│   │   └── worker.py     # Background post-ingest task
+│   ├── websocket/        # ConnectionManager + WS route
+│   ├── db.py             # Async engine, session factory, table init
+│   ├── main.py           # App entry point + lifespan hook
+│   ├── seed.py           # Demo event generator
+│   └── requirements.txt
 ├── frontend/
-│   ├── app/            # Next.js App Router pages
-│   ├── components/     # Reusable UI components
-│   ├── lib/            # API client, WebSocket hook, utilities
-│   ├── next.config.ts
-│   ├── tsconfig.json
+│   ├── app/              # Next.js App Router
+│   ├── components/       # StatCard, EventTypeChart, TimeseriesChart, EventSimulator
+│   ├── lib/
+│   │   ├── api.ts        # Typed fetch client
+│   │   ├── useWebSocket.ts  # Auto-reconnecting WS hook
+│   │   └── utils.ts
 │   └── Dockerfile
 ├── docker-compose.yml
 ├── .env.example
@@ -45,64 +91,52 @@ signalflow/
 
 ---
 
-## Quick Start (Docker)
+## Running Locally
+
+### Option A — Docker (recommended, one command)
 
 ```bash
-# 1. Clone and enter the project
-cd signalflow
-
-# 2. Create your env file
 cp .env.example .env
-
-# 3. Build and start all services
 docker compose up --build
-
-# 4. Open the dashboard
-open http://localhost:3000
-
-# 5. Explore the API docs
-open http://localhost:8000/docs
 ```
+
+| Service | URL |
+|---|---|
+| Dashboard | http://localhost:3000 |
+| API | http://localhost:8000 |
+| API docs | http://localhost:8000/docs |
 
 ---
 
-## Local Development (without Docker)
+### Option B — Native (frontend + backend separately)
 
-### Backend
+**Prerequisites:** Python 3.12+, Node 18+, a running Postgres instance, a running Redis instance.
 
+**Backend**
 ```bash
 cd backend
-
-# Create and activate a virtual environment
 python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
-
-# Install dependencies
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-
-# Copy and configure env vars
-cp ../.env.example .env
-# Edit DATABASE_URL and REDIS_URL to point to localhost
-
-# Start the API server
+cp ../.env.example .env          # set DATABASE_URL and REDIS_URL to localhost
 uvicorn main:app --reload --port 8000
 ```
 
-### Frontend
-
+**Frontend**
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Copy and configure env vars
-cp ../.env.example .env.local
-# NEXT_PUBLIC_API_URL=http://localhost:8000
-# NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws/metrics
-
-# Start the dev server
+# create frontend/.env.local:
+#   NEXT_PUBLIC_API_URL=http://localhost:8000
+#   NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws/metrics
 npm run dev
+```
+
+**Seed demo data**
+```bash
+cd backend
+source .venv/bin/activate
+python seed.py --count 40
 ```
 
 ---
@@ -111,15 +145,13 @@ npm run dev
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/health` | Health check |
-| POST | `/events` | Ingest an activity event |
-| GET | `/metrics/summary` | Aggregated KPI summary (Redis-cached) |
-| GET | `/metrics/timeseries` | Time-bucketed event counts for charts |
-| WS | `/ws/metrics` | Live metric push stream |
+| `GET` | `/health` | Health check |
+| `POST` | `/events` | Ingest an activity event |
+| `GET` | `/metrics/summary` | Aggregated KPIs — Redis-cached, 10 s TTL |
+| `GET` | `/metrics/timeseries` | Time-bucketed counts (`?interval=minute\|hour\|day`) |
+| `WS` | `/ws/metrics` | Live push stream — server broadcasts on every ingest |
 
----
-
-## Event Schema
+### Event payload
 
 ```json
 {
@@ -130,15 +162,9 @@ npm run dev
 }
 ```
 
-Supported `event_type` values: `page_view`, `click`, `signup`, `purchase`, `session_start`
+Supported `event_type` values: `page_view` · `click` · `signup` · `purchase` · `session_start`
 
----
-
-## Simulating Events
-
-Use the **Event Simulator** panel on the dashboard to fire single events or a burst of 10 random events directly from the UI.
-
-Or send events via curl:
+### Quick curl test
 
 ```bash
 curl -X POST http://localhost:8000/events \
@@ -148,10 +174,11 @@ curl -X POST http://localhost:8000/events \
 
 ---
 
-## Build Phases
+## Key Engineering Patterns
 
-- [x] Phase 1 — Project structure and starter files
-- [ ] Phase 2 — Backend MVP (DB, Redis, worker, full routes)
-- [ ] Phase 3 — Frontend dashboard (charts, KPI cards, live updates)
-- [ ] Phase 4 — Docker wiring and end-to-end test
-- [ ] Phase 5 — Polish and README finalization
+- **Async FastAPI** with SQLAlchemy 2.x and `asyncpg` — no blocking DB calls on the request thread
+- **Redis read-through cache** — summary metrics are served from Redis and recomputed only on write, keeping read latency low under high ingest volume
+- **Fire-and-forget background tasks** — `asyncio.create_task()` decouples post-ingest work from HTTP response time
+- **WebSocket fan-out** — `ConnectionManager` holds all active sockets and broadcasts JSON to every connected client on each ingest
+- **Pydantic v2 validation** — all inputs validated at the boundary; invalid payloads are rejected with structured 422 errors
+- **Containerised multi-service stack** — Postgres, Redis, API, and UI all defined in a single `docker-compose.yml`
