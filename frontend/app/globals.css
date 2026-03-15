@@ -1,0 +1,226 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: #0f1117;
+  color: #e8eaf0;
+  min-height: 100vh;
+}
+
+a { color: inherit; text-decoration: none; }
+
+/* ── Layout ── */
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.header-left h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.header-left p {
+  font-size: 0.8rem;
+  color: #888;
+  margin-top: 0.2rem;
+}
+
+/* ── Live badge ── */
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 9999px;
+  border: 1px solid #2a2d3a;
+  color: #888;
+  background: #1a1d27;
+}
+
+.live-badge.connected {
+  border-color: #064e3b;
+  color: #6ee7b7;
+  background: #022c22;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4b5563;
+}
+
+.live-badge.connected .live-dot {
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ── Stat cards row ── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+}
+
+.stat-card .label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #888;
+}
+
+.stat-card .value {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-top: 0.2rem;
+  line-height: 1;
+}
+
+.stat-card .sub {
+  font-size: 0.72rem;
+  color: #888;
+  margin-top: 0.3rem;
+}
+
+/* ── Charts grid ── */
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 720px) {
+  .chart-grid { grid-template-columns: 1fr; }
+}
+
+.chart-card {
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 10px;
+  padding: 1.25rem;
+}
+
+.chart-card .chart-title {
+  font-size: 0.8rem;
+  color: #aaa;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+/* ── Simulator card ── */
+.simulator-card {
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 10px;
+  padding: 1.25rem;
+}
+
+.simulator-card .chart-title {
+  font-size: 0.8rem;
+  color: #aaa;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.btn {
+  padding: 0.4rem 0.9rem;
+  background: #2a2d3a;
+  border: 1px solid #3a3d4a;
+  border-radius: 6px;
+  color: #e8eaf0;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn:hover:not(:disabled) { background: #33364a; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-primary {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+
+.btn-primary:hover:not(:disabled) { background: #4338ca; }
+
+.status-msg {
+  margin-top: 0.75rem;
+  font-size: 0.78rem;
+  color: #6ee7b7;
+}
+
+.status-msg.error { color: #f87171; }
+
+/* ── Loading / error states ── */
+.loading-state, .error-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.error-state { color: #f87171; }
+
+/* ── Interval tabs ── */
+.interval-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.interval-tab {
+  padding: 0.25rem 0.6rem;
+  border-radius: 5px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #888;
+  transition: all 0.15s;
+}
+
+.interval-tab.active {
+  background: #2a2d3a;
+  border-color: #3a3d4a;
+  color: #e8eaf0;
+}
