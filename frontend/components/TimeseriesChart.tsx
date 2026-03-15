@@ -3,7 +3,6 @@
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
-import { useState } from "react";
 import type { TimeseriesPoint } from "@/lib/api";
 
 type Interval = "minute" | "hour" | "day";
@@ -18,29 +17,14 @@ function formatBucket(iso: string, interval: Interval): string {
 interface Props {
   data: TimeseriesPoint[];
   interval: Interval;
-  onIntervalChange: (i: Interval) => void;
 }
 
-export function TimeseriesChart({ data, interval, onIntervalChange }: Props) {
-  const TABS: Interval[] = ["minute", "hour", "day"];
+export function TimeseriesChart({ data, interval }: Props) {
   const chartData = data.map((p) => ({ ...p, label: formatBucket(p.bucket, interval) }));
 
   return (
     <div className="chart-card">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-        <p className="chart-title" style={{ marginBottom: 0 }}>Event Volume Over Time</p>
-        <div className="interval-tabs">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              className={`interval-tab${interval === t ? " active" : ""}`}
-              onClick={() => onIntervalChange(t)}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
+      <p className="chart-title">Event Volume Over Time</p>
       <ResponsiveContainer width="100%" height={210}>
         <AreaChart data={chartData} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
           <defs>

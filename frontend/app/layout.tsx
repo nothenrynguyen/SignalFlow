@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SignalFlow — Real-Time Analytics",
+  title: "SignalFlow Dashboard",
   description: "Real-time event analytics platform",
 };
 

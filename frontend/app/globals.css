@@ -29,6 +29,13 @@ a { color: inherit; text-decoration: none; }
   gap: 0.75rem;
 }
 
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
 .header-left h1 {
   font-size: 1.5rem;
   font-weight: 700;
@@ -201,7 +208,7 @@ a { color: inherit; text-decoration: none; }
 
 .error-state { color: #f87171; }
 
-/* ── Interval tabs ── */
+/* ── Interval tabs (kept for legacy; unused now) ── */
 .interval-tabs {
   display: flex;
   gap: 0.35rem;
@@ -223,4 +230,132 @@ a { color: inherit; text-decoration: none; }
   background: #2a2d3a;
   border-color: #3a3d4a;
   color: #e8eaf0;
+}
+
+/* ── Time range selector ── */
+.range-group {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.range-btn {
+  padding: 0.28rem 0.65rem;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  border: 1px solid #2a2d3a;
+  background: transparent;
+  color: #888;
+  transition: all 0.15s;
+}
+
+.range-btn:hover {
+  border-color: #3a3d4a;
+  color: #ccc;
+}
+
+.range-btn.active {
+  background: #2a2d3a;
+  border-color: #4f46e5;
+  color: #e8eaf0;
+}
+
+/* ── Pause / Resume button ── */
+.pause-btn {
+  padding: 0.28rem 0.75rem;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  border: 1px solid #2a2d3a;
+  background: transparent;
+  color: #888;
+  transition: all 0.15s;
+}
+
+.pause-btn:hover {
+  border-color: #3a3d4a;
+  color: #ccc;
+}
+
+.pause-btn.paused {
+  border-color: #f59e0b;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+/* ── Recent events feed ── */
+.feed-card {
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 10px;
+  padding: 1.25rem;
+  margin-top: 1rem;
+}
+
+.feed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+
+.feed-count {
+  font-size: 0.7rem;
+  color: #555;
+}
+
+.feed-empty {
+  font-size: 0.82rem;
+  color: #555;
+  padding: 0.5rem 0;
+}
+
+.feed-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.feed-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  background: #141720;
+  font-size: 0.78rem;
+  animation: feed-slide-in 0.2s ease;
+}
+
+@keyframes feed-slide-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.feed-type-pill {
+  flex-shrink: 0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  font-size: 0.7rem;
+  font-weight: 500;
+  min-width: 90px;
+  text-align: center;
+}
+
+.feed-session {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #888;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.72rem;
+}
+
+.feed-time {
+  flex-shrink: 0;
+  color: #555;
+  font-size: 0.7rem;
 }

@@ -15,6 +15,7 @@ export interface WsMessage {
   type: string;
   event_type?: string;
   data?: MetricsSummary;
+  event?: import("@/lib/api").EventRead;
 }
 
 export function useMetricsSocket(onMessage?: (msg: WsMessage) => void) {

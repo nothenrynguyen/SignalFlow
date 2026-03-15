@@ -15,6 +15,7 @@ htmlcov/
 # Environment
 .env
 backend/.env
+frontend/.env.local
 
 # Node / Next.js
 node_modules/

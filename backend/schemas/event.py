@@ -2,13 +2,9 @@
 Pydantic schemas for event ingestion and validation.
 """
 from pydantic import BaseModel, Field
-from typing import Literal, Optional, Dict, Any
+from typing import Optional, Dict, Any
 from datetime import datetime
 import uuid
-
-EVENT_TYPES = Literal[
-    "page_view", "click", "signup", "purchase", "session_start"
-]
 
 
 class EventCreate(BaseModel):

@@ -1,8 +1,8 @@
 # SignalFlow
 
-A production-style real-time event analytics platform. Activity events are ingested through a REST API, aggregated asynchronously, cached in Redis, and pushed live to a dashboard over WebSockets.
+A production-style real-time event analytics platform. Events are ingested through a REST API, aggregated with Redis caching, and pushed live to a dashboard over WebSockets.
 
-Built as a full-stack portfolio project to demonstrate distributed backend thinking, async processing, and real-time UI patterns.
+Built as a full-stack portfolio project demonstrating async backend architecture, real-time UI patterns, and containerised deployment.
 
 ---
 
@@ -34,27 +34,37 @@ Built as a full-stack portfolio project to demonstrate distributed backend think
 ```
 Browser
   │
-  ├── HTTP GET  /metrics/summary     ──► Redis cache (10s TTL)
-  │                                         │ miss → PostgreSQL aggregates
-  ├── HTTP GET  /metrics/timeseries  ──► PostgreSQL date_trunc query
+  ├─ HTTP GET  /metrics/summary     ──► Redis cache (10 s TTL)
+  │                                        │ miss → PostgreSQL aggregates
+  ├─ HTTP GET  /metrics/timeseries  ──► PostgreSQL date_trunc query
   │
-  ├── HTTP POST /events              ──► PostgreSQL insert
-  │                                         │
-  │                                   background worker
-  │                                         │
-  │                                   invalidate Redis cache
-  │                                         │
-  └── WebSocket /ws/metrics  ◄────── broadcast updated metrics
-                                      to all connected clients
+  ├─ HTTP POST /events              ──► PostgreSQL insert
+  │                                        │
+  │                                  background task (asyncio)
+  │                                        ├─ invalidate Redis cache
+  │                                        ├─ broadcast event_ingested → live feed
+  │                                        └─ broadcast metrics_update → KPI cards
+  │
+  └─ WebSocket /ws/metrics  ◄──────────── fan-out to all connected clients
 ```
 
-### Event ingestion pipeline
+---
 
-1. Client sends `POST /events` with `event_type`, `session_id`, and optional metadata
-2. Pydantic validates the payload; FastAPI returns `201` with the persisted event
-3. An `asyncio` background task fires immediately after — no added latency to the response
-4. The task invalidates the Redis summary cache, recomputes aggregates from Postgres, and broadcasts the fresh summary to all connected WebSocket clients
-5. The Next.js dashboard receives the push and updates KPI cards and charts without polling
+## How Event Ingestion Works
+
+1. Client sends `POST /events` with `event_type`, `session_id`, and optional metadata.
+2. Pydantic validates the payload; FastAPI writes the row to Postgres and returns `201` with the persisted event.
+3. An `asyncio.create_task` fires immediately — the HTTP response is never blocked by this work.
+4. The background task (a) invalides the Redis summary cache, (b) broadcasts `event_ingested` with the full event to all WebSocket clients (appears instantly in the live feed), and (c) recomputes the summary and broadcasts `metrics_update` (KPI cards update without polling).
+
+## How Live Updates Work
+
+- The Next.js dashboard opens a single WebSocket connection to `/ws/metrics` on mount.
+- The hook (`useWebSocket.ts`) reconnects automatically after a 3 s delay if the connection drops.
+- Two message types arrive:
+  - `event_ingested` — prepended to the live event feed, capped at 20 entries.
+  - `metrics_update` — triggers a re-fetch of summary and timeseries data scoped to the active time range.
+- A **Pause / Resume** toggle in the header gates all incoming WebSocket messages without closing the socket. On resume, a fresh fetch catches up immediately.
 
 ---
 
@@ -63,25 +73,27 @@ Browser
 ```
 signalflow/
 ├── backend/
-│   ├── api/              # Route handlers — health, events, metrics
-│   ├── models/           # SQLAlchemy ORM models
-│   ├── schemas/          # Pydantic request / response shapes
+│   ├── api/                  # Route handlers — health, events, metrics
+│   ├── models/               # SQLAlchemy ORM models
+│   ├── schemas/              # Pydantic request / response shapes
 │   ├── services/
-│   │   ├── cache.py      # Redis async client
-│   │   ├── event_service.py
-│   │   ├── metrics_service.py
-│   │   └── worker.py     # Background post-ingest task
-│   ├── websocket/        # ConnectionManager + WS route
-│   ├── db.py             # Async engine, session factory, table init
-│   ├── main.py           # App entry point + lifespan hook
-│   ├── seed.py           # Demo event generator
+│   │   ├── cache.py          # Redis async client (singleton)
+│   │   ├── event_service.py  # Persist events to Postgres
+│   │   ├── metrics_service.py# Aggregate queries + Redis cache
+│   │   └── worker.py         # Background post-ingest task
+│   ├── websocket/            # ConnectionManager + WebSocket route
+│   ├── tests/                # pytest suite (SQLite in-memory)
+│   ├── db.py                 # Async engine, session factory, table init
+│   ├── main.py               # FastAPI app entry point
+│   ├── seed.py               # Demo event generator
 │   └── requirements.txt
 ├── frontend/
-│   ├── app/              # Next.js App Router
-│   ├── components/       # StatCard, EventTypeChart, TimeseriesChart, EventSimulator
+│   ├── app/                  # Next.js App Router
+│   ├── components/           # StatCard, EventTypeChart, TimeseriesChart,
+│   │                         # EventSimulator, RecentEventsFeed
 │   ├── lib/
-│   │   ├── api.ts        # Typed fetch client
-│   │   ├── useWebSocket.ts  # Auto-reconnecting WS hook
+│   │   ├── api.ts            # Typed fetch client
+│   │   ├── useWebSocket.ts   # Auto-reconnecting WebSocket hook
 │   │   └── utils.ts
 │   └── Dockerfile
 ├── docker-compose.yml
@@ -91,9 +103,9 @@ signalflow/
 
 ---
 
-## Running Locally
+## Local Setup
 
-### Option A — Docker (recommended, one command)
+### Option A — Docker (all services, one command)
 
 ```bash
 cp .env.example .env
@@ -106,37 +118,58 @@ docker compose up --build
 | API | http://localhost:8000 |
 | API docs | http://localhost:8000/docs |
 
+To seed demo data while Docker is running:
+```bash
+cd backend
+pip install httpx   # if not in your local env
+python seed.py --count 40 --url http://localhost:8000
+```
+
 ---
 
-### Option B — Native (frontend + backend separately)
+### Option B — Native (Postgres + Redis in Docker, services native)
 
-**Prerequisites:** Python 3.12+, Node 18+, a running Postgres instance, a running Redis instance.
+**1. Start Postgres and Redis**
+```bash
+docker compose up -d postgres redis
+```
 
-**Backend**
+**2. Backend**
 ```bash
 cd backend
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp ../.env.example .env          # set DATABASE_URL and REDIS_URL to localhost
+cp ../.env.example .env
+# Edit .env: change postgres host to localhost, redis host to localhost
+#   DATABASE_URL=postgresql+asyncpg://signalflow:signalflow@localhost:5432/signalflow
+#   REDIS_URL=redis://localhost:6379
 uvicorn main:app --reload --port 8000
 ```
 
-**Frontend**
+**3. Frontend**
 ```bash
 cd frontend
 npm install
-# create frontend/.env.local:
+# Create frontend/.env.local:
 #   NEXT_PUBLIC_API_URL=http://localhost:8000
 #   NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws/metrics
 npm run dev
 ```
 
-**Seed demo data**
+**4. Seed demo data** (optional)
 ```bash
 cd backend
 source .venv/bin/activate
 python seed.py --count 40
+```
+
+**5. Run tests**
+```bash
+cd backend
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+python -m pytest tests/ -v
 ```
 
 ---
@@ -147,8 +180,8 @@ python seed.py --count 40
 |---|---|---|
 | `GET` | `/health` | Health check |
 | `POST` | `/events` | Ingest an activity event |
-| `GET` | `/metrics/summary` | Aggregated KPIs — Redis-cached, 10 s TTL |
-| `GET` | `/metrics/timeseries` | Time-bucketed counts (`?interval=minute\|hour\|day`) |
+| `GET` | `/metrics/summary` | KPI aggregates — Redis-cached, 10 s TTL. Accepts `?lookback_hours=N` |
+| `GET` | `/metrics/timeseries` | Time-bucketed counts. Params: `interval` (minute\|hour\|day), `lookback_hours` |
 | `WS` | `/ws/metrics` | Live push stream — server broadcasts on every ingest |
 
 ### Event payload
@@ -164,21 +197,24 @@ python seed.py --count 40
 
 Supported `event_type` values: `page_view` · `click` · `signup` · `purchase` · `session_start`
 
-### Quick curl test
+---
 
-```bash
-curl -X POST http://localhost:8000/events \
-  -H "Content-Type: application/json" \
-  -d '{"event_type": "signup", "session_id": "s1", "user_id": "u1"}'
-```
+## Dashboard Features
+
+- **KPI cards** — total events, unique sessions, unique users, top event type
+- **Events by Type** — bar chart with per-type colour coding
+- **Event Volume Over Time** — area chart with time-bucketed counts
+- **Time range selector** — 15 m / 1 h / 24 h; controls both charts and KPI cards
+- **Live event feed** — last 20 events with type pill, session ID, and relative timestamp; updates in real time
+- **Pause / Resume** — freezes WebSocket updates without closing the socket; resume fetches fresh data immediately
+- **Event Simulator** — fire individual events or a burst of 10 from the dashboard
 
 ---
 
-## Key Engineering Patterns
+## Deployment Notes
 
-- **Async FastAPI** with SQLAlchemy 2.x and `asyncpg` — no blocking DB calls on the request thread
-- **Redis read-through cache** — summary metrics are served from Redis and recomputed only on write, keeping read latency low under high ingest volume
-- **Fire-and-forget background tasks** — `asyncio.create_task()` decouples post-ingest work from HTTP response time
-- **WebSocket fan-out** — `ConnectionManager` holds all active sockets and broadcasts JSON to every connected client on each ingest
-- **Pydantic v2 validation** — all inputs validated at the boundary; invalid payloads are rejected with structured 422 errors
-- **Containerised multi-service stack** — Postgres, Redis, API, and UI all defined in a single `docker-compose.yml`
+- For production, restrict `allow_origins` in `main.py` to your frontend domain.
+- Set strong credentials in `.env`; never commit `.env` to version control.
+- The backend `Dockerfile` runs without `--reload`; add a process manager (e.g. Gunicorn with Uvicorn workers) for multi-worker deployments.
+- For Next.js, the frontend `Dockerfile` uses `output: 'standalone'` which produces a minimal self-contained build.
+- Postgres data is persisted in a named Docker volume (`postgres_data`). Back it up before destroying the stack.

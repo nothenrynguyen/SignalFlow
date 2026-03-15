@@ -12,17 +12,27 @@ Current tasks:
      connected dashboards refresh without needing to poll.
 """
 import asyncio
+from typing import Any
 
 from services.metrics_service import get_summary, invalidate_summary_cache
 from websocket.manager import manager
 
 
-async def run_post_ingest_tasks(db) -> None:
+async def run_post_ingest_tasks(db, event_data: dict[str, Any] | None = None) -> None:
     """
     Fire-and-forget coroutine spawned after each event ingest.
     Errors are caught so they never bubble up to the HTTP response.
+
+    event_data: serialised EventRead dict, broadcast to live-feed subscribers.
     """
     try:
+        # Notify feed subscribers immediately so the event appears right away.
+        if event_data is not None:
+            await manager.broadcast({
+                "type": "event_ingested",
+                "event": event_data,
+            })
+
         await invalidate_summary_cache()
 
         # Recompute summary and push the full payload to WS clients so

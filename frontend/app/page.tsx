@@ -1,28 +1,46 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { api, MetricsSummary, MetricsTimeseries } from "@/lib/api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, EventRead, MetricsSummary, MetricsTimeseries } from "@/lib/api";
 import { useMetricsSocket } from "@/lib/useWebSocket";
 import { StatCard } from "@/components/StatCard";
 import { EventTypeChart } from "@/components/EventTypeChart";
 import { TimeseriesChart } from "@/components/TimeseriesChart";
 import { EventSimulator } from "@/components/EventSimulator";
+import { RecentEventsFeed } from "@/components/RecentEventsFeed";
 
 type Interval = "minute" | "hour" | "day";
 
+interface TimeRange {
+  label: string;
+  hours: number;
+  interval: Interval;
+}
+
+const TIME_RANGES: TimeRange[] = [
+  { label: "15m", hours: 0.25,  interval: "minute" },
+  { label: "1h",  hours: 1,     interval: "minute" },
+  { label: "24h", hours: 24,    interval: "hour"   },
+];
+
 export default function DashboardPage() {
-  const [summary, setSummary]       = useState<MetricsSummary | null>(null);
-  const [timeseries, setTimeseries] = useState<MetricsTimeseries | null>(null);
-  const [interval, setInterval]     = useState<Interval>("hour");
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState<string | null>(null);
+  const [summary, setSummary]           = useState<MetricsSummary | null>(null);
+  const [timeseries, setTimeseries]     = useState<MetricsTimeseries | null>(null);
+  const [timeRange, setTimeRange]       = useState<TimeRange>(TIME_RANGES[2]); // default: 24h
+  const [isPaused, setIsPaused]         = useState(false);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState<string | null>(null);
+  const [recentEvents, setRecentEvents] = useState<EventRead[]>([]);
+
+  const isPausedRef = useRef(isPaused);
+  isPausedRef.current = isPaused;
 
   // ── Data fetching ────────────────────────────────────────────────────────
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (range: TimeRange = timeRange) => {
     try {
       const [s, t] = await Promise.all([
-        api.getMetricsSummary(),
-        api.getMetricsTimeseries(interval),
+        api.getMetricsSummary(range.hours),
+        api.getMetricsTimeseries(range.interval, range.hours),
       ]);
       setSummary(s);
       setTimeseries(t);
@@ -32,22 +50,40 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [interval]);
+  }, [timeRange]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── WebSocket — apply full summary push or re-fetch on any message ────────
+  // ── Time range selection ─────────────────────────────────────────────────
+  function selectRange(range: TimeRange) {
+    setTimeRange(range);
+    setLoading(true);
+    fetchAll(range);
+  }
+
+  // ── Pause / Resume ───────────────────────────────────────────────────────
+  function togglePause() {
+    const next = !isPaused;
+    setIsPaused(next);
+    if (!next) {
+      // Resuming — fetch fresh data immediately to catch up
+      fetchAll();
+    }
+  }
+
+  // ── WebSocket — handle metrics push + live event feed ───────────────────
   const { connected } = useMetricsSocket(
     useCallback((msg) => {
-      if (msg.type === "metrics_update" && msg.data) {
-        // Worker pushed a full pre-computed summary — apply it immediately
-        setSummary(msg.data);
-        // Still refresh timeseries so the chart stays current
-        api.getMetricsTimeseries(interval).then(setTimeseries).catch(() => null);
-      } else {
+      if (isPausedRef.current) return;   // gate updates when paused
+
+      if (msg.type === "event_ingested" && msg.event) {
+        setRecentEvents((prev) => [msg.event!, ...prev].slice(0, 20));
+      } else if (msg.type === "metrics_update") {
+        // Worker always broadcasts all-time summary.
+        // Re-fetch if a time filter is active so the numbers stay accurate.
         fetchAll();
       }
-    }, [fetchAll, interval])
+    }, [fetchAll])
   );
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -59,9 +95,34 @@ export default function DashboardPage() {
           <h1>SignalFlow</h1>
           <p>Real-Time Event Analytics</p>
         </div>
-        <div className={`live-badge${connected ? " connected" : ""}`}>
-          <span className="live-dot" />
-          {connected ? "Live" : "Connecting…"}
+
+        <div className="header-controls">
+          {/* Time range selector */}
+          <div className="range-group">
+            {TIME_RANGES.map((r) => (
+              <button
+                key={r.label}
+                className={`range-btn${timeRange.label === r.label ? " active" : ""}`}
+                onClick={() => selectRange(r)}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Pause / Resume toggle */}
+          <button
+            className={`pause-btn${isPaused ? " paused" : ""}`}
+            onClick={togglePause}
+          >
+            {isPaused ? "▶ Resume" : "⏸ Pause"}
+          </button>
+
+          {/* Live badge */}
+          <div className={`live-badge${connected && !isPaused ? " connected" : ""}`}>
+            <span className="live-dot" />
+            {isPaused ? "Paused" : connected ? "Live" : "Connecting…"}
+          </div>
         </div>
       </div>
 
@@ -90,14 +151,16 @@ export default function DashboardPage() {
             {timeseries && (
               <TimeseriesChart
                 data={timeseries.data}
-                interval={interval}
-                onIntervalChange={(i) => setInterval(i)}
+                interval={timeRange.interval}
               />
             )}
           </div>
 
           {/* Event simulator */}
-          <EventSimulator onEventSent={fetchAll} />
+          <EventSimulator onEventSent={() => fetchAll()} />
+
+          {/* Live event feed */}
+          <RecentEventsFeed events={recentEvents} />
         </>
       )}
     </main>

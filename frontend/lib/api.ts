@@ -61,9 +61,11 @@ export const api = {
   ingestEvent: (payload: EventCreate) =>
     apiFetch<EventRead>("/events", { method: "POST", body: JSON.stringify(payload) }),
 
-  getMetricsSummary: () =>
-    apiFetch<MetricsSummary>("/metrics/summary"),
+  getMetricsSummary: (lookbackHours?: number) => {
+    const qs = lookbackHours != null ? `?lookback_hours=${lookbackHours}` : "";
+    return apiFetch<MetricsSummary>(`/metrics/summary${qs}`);
+  },
 
-  getMetricsTimeseries: (interval: "minute" | "hour" | "day" = "hour") =>
-    apiFetch<MetricsTimeseries>(`/metrics/timeseries?interval=${interval}`),
+  getMetricsTimeseries: (interval: "minute" | "hour" | "day" = "hour", lookbackHours = 24) =>
+    apiFetch<MetricsTimeseries>(`/metrics/timeseries?interval=${interval}&lookback_hours=${lookbackHours}`),
 };
